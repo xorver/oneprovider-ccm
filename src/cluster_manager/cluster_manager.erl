@@ -106,7 +106,7 @@ init(_) ->
     | {noreply, NewState, hibernate}
     | {stop, Reason, Reply, NewState}
     | {stop, Reason, NewState},
-    Reply :: nagios_handler:healthcheck_reponse() | term(),
+    Reply :: term(),
     NewState :: term(),
     Timeout :: non_neg_integer() | infinity,
     Reason :: term().
@@ -243,6 +243,13 @@ heartbeat(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes}, Sen
             end
     end.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Receive acknowledgement of successfull worker initialization on node
+%% @end
+%%--------------------------------------------------------------------
+-spec init_ok(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
 init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_num = StateNum}, SenderNode) ->
     NewInitNodes = lists:delete(SenderNode, InitNodes),
     NewNodes = [SenderNode | lists:delete(SenderNode, Nodes)],
@@ -250,6 +257,14 @@ init_ok(State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes, state_
     update_node_managers(NewNodes, NewStateNum),
     State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Sends information to all nodes, that the state of cluster has changed and
+%% they are supposed to synchronize
+%% @end
+%%--------------------------------------------------------------------
+-spec update_node_managers(State :: #cm_state{}, SenderNode :: node()) -> #cm_state{}.
 update_node_managers(Nodes, NewStateNum) ->
     UpdateNode = fun(Node) ->
         gen_server:cast({?NODE_MANAGER_NAME, Node}, {update_state, NewStateNum})
@@ -271,6 +286,14 @@ node_down(Node, State = #cm_state{nodes = Nodes, uninitialized_nodes = InitNodes
     update_node_managers(NewNodes, NewStateNum),
     State#cm_state{nodes = NewNodes, uninitialized_nodes = NewInitNodes, state_num = NewStateNum}.
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Handles healthcheck request
+%% @end
+%%--------------------------------------------------------------------
+-spec healthcheck(State :: #cm_state{}) ->
+    {ok, {Nodes, StateNum}} | {error, invalid_worker_num}.
 healthcheck(#cm_state{nodes = Nodes, state_num = StateNum}) ->
     case application:get_env(?APP_NAME, worker_num) of
         {ok, N} when N =:= length(Nodes)->
